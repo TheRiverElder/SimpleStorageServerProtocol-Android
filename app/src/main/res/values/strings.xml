@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Simple Storage Server Protocol</string>
+    <string name="toggle_button_text_start">开始</string>
+    <string name="toggle_button_text_stop">结束</string>
+</resources>

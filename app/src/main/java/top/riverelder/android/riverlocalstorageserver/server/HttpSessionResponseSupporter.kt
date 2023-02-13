@@ -11,6 +11,7 @@ import java.net.URI
 
 class HttpSessionResponseSupporter(
     private val session: NanoHTTPD.IHTTPSession,
+    private val isHttps: Boolean,
 ) : ResponseSupporter {
 
     private var status: IStatus? = null
@@ -18,8 +19,10 @@ class HttpSessionResponseSupporter(
     private val headers: MutableMap<String, String> = HashMap()
     private var responseBody: InputStream? = null
 
-    override fun getRequestUri(): URI =
-        URI("http", null, session.uri, session.queryParameterString, null)
+    override fun getRequestUri(): URI {
+        val protocol = if (isHttps) "https" else "http"
+        return URI("${protocol}://0.0.0.0${session.uri}?${session.queryParameterString}")
+    }
 
     override fun getRequestBody(): InputStream = session.inputStream
 
@@ -47,6 +50,8 @@ class HttpSessionResponseSupporter(
 
         val contentType = headers["Content-Type"] ?: "text/plain"
 
-        return newFixedLengthResponse(status, contentType, responseBody, contentLength)
+        val response = newFixedLengthResponse(status, contentType, responseBody, contentLength)
+        headers.forEach { response.addHeader(it.key, it.value) }
+        return response
     }
 }

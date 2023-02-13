@@ -9,7 +9,7 @@ class SimpleStorageServerServiceConnection(
     public val activity: MainActivity,
 ) : ServiceConnection {
 
-    var service: SimpleStorageServerService? = null; private set
+    public var service: SimpleStorageServerService? = null; private set
 
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         if (binder is SimpleStorageServerBinder) {

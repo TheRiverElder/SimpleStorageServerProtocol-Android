@@ -1,16 +1,15 @@
 package top.riverelder.android.riverlocalstorageserver
 
-import android.app.AlertDialog
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import android.text.InputType
 import android.util.Log
 import android.widget.*
@@ -29,17 +28,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonInitialize: Button
     private lateinit var buttonStart: Button
     private lateinit var buttonStop: Button
-    private lateinit var editTextPortInput: EditText
+    private lateinit var editTextHttpPortInput: EditText
+    private lateinit var editTextHttpsPortInput: EditText
     private lateinit var listViewUrlList: ListView
 
     private fun setupViews() {
         buttonInitialize = findViewById(R.id.buttonInitialize)
         buttonStart = findViewById(R.id.buttonStart)
         buttonStop = findViewById(R.id.buttonStop)
-        editTextPortInput = findViewById(R.id.editTextPortInput)
+        editTextHttpPortInput = findViewById(R.id.editTextHttpPortInput)
+        editTextHttpsPortInput = findViewById(R.id.editTextHttpsPortInput)
         listViewUrlList = findViewById(R.id.listViewUrlList)
 
-        editTextPortInput.inputType = InputType.TYPE_CLASS_NUMBER
+        editTextHttpPortInput.inputType = InputType.TYPE_CLASS_NUMBER
 
         buttonInitialize.setOnClickListener { onClickButtonInitialize() }
         buttonStart.setOnClickListener { onClickButtonStart() }
@@ -56,9 +57,11 @@ class MainActivity : AppCompatActivity() {
 
     //#endregion
 
-    private val port: Int get() {
-        return try { parseInt(editTextPortInput.text.toString()) } catch (e: Exception) { DEFAULT_PORT }
-    }
+    private val httpPort: Int get() =
+        try { parseInt(editTextHttpPortInput.text.toString()) } catch (e: Exception) { DEFAULT_HTTP_PORT }
+
+    private val httpsPort: Int get() =
+        try { parseInt(editTextHttpsPortInput.text.toString()) } catch (e: Exception) { DEFAULT_HTTPS_PORT }
 
     private val connection = SimpleStorageServerServiceConnection(this)
 
@@ -68,15 +71,21 @@ class MainActivity : AppCompatActivity() {
 
         setupViews()
 
+        ensureReadWritePermission()
+
         //绑定Service
+        bindService()
+    }
+
+    private fun bindService() {
         val intent = Intent("top.riverelder.android.riverlocalstorageserver.SIMPLE_STORAGE_SERVER")
         intent.setPackage(packageName)
         intent.setClass(this, SimpleStorageServerService::class.java)
         startService(intent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
-
-        ensureReadWritePermission()
     }
+
+    private var permissionRequestCode = 0
 
     private fun ensureReadWritePermission() {
 //        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
@@ -92,19 +101,55 @@ class MainActivity : AppCompatActivity() {
 //                }
 //            builder.show()
 //        }
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!= PackageManager.PERMISSION_GRANTED) {
+
+            permissionRequestCode = 1024
+            requestPermissions(listOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ).toTypedArray(), permissionRequestCode)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != permissionRequestCode) return
+        for (i in permissions.indices) {
+            val permission = permissions[i]
+            val grantResult = grantResults.getOrElse(i) { PackageManager.PERMISSION_DENIED }
+            val permissionName = when (permission) {
+                Manifest.permission.READ_EXTERNAL_STORAGE -> "读"
+                Manifest.permission.WRITE_EXTERNAL_STORAGE -> "写"
+                else -> permission
+            }
+            val grantResultString = when (grantResult) {
+                PackageManager.PERMISSION_DENIED -> "拒绝"
+                PackageManager.PERMISSION_GRANTED -> "允许"
+                else -> "未知"
+            }
+
+            Toast.makeText(this, "${permissionName}权限已被${grantResultString}", Toast.LENGTH_SHORT)
+                .show()
+        }
     }
 
     private fun checkAndGetService() = connection.service ?: throw Exception("No service connected!")
 
     private fun onClickButtonInitialize() {
-        val port = port
-        if (toastExceptionMessage { checkAndGetService().initializeServer(port) }) {
-            Toast.makeText(this, "初始化完成，端口：$port", Toast.LENGTH_SHORT).show()
+        val httpPort = httpPort
+        val httpsPort = httpsPort
+        if (toastExceptionMessage { checkAndGetService().initializeServers(httpPort, httpsPort, this) }) {
+            Toast.makeText(this, "初始化完成，端口：HTTP=$httpPort, HTTPS=$httpsPort", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun onClickButtonStart() {
         if (toastExceptionMessage { checkAndGetService().startServer() }) {
+            lockPortEditTexts()
             refreshIpList()
             Toast.makeText(this, "已开启", Toast.LENGTH_SHORT).show()
         }
@@ -112,19 +157,56 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshIpList() {
         Thread {
+            val httpPort = httpPort
+            val httpsPort = httpsPort
             val adapter =
-                ArrayAdapter(this, android.R.layout.simple_list_item_1, listOf(getIPAddress()).map { "http://$it:$port/" })
+                ArrayAdapter(
+                    this,
+                    android.R.layout.simple_list_item_1,
+                    listOf(getIPAddress())
+                        .map { listOf("$it:$httpPort", "$it:$httpsPort") }
+                        .flatten()
+                )
             runOnUiThread {
                 listViewUrlList.adapter = adapter
             }
         }.start()
     }
 
-    private fun onClickButtonStop() {
-        if (toastExceptionMessage { checkAndGetService().stopServer() }) {
+    private fun clearIpList() {
+        Thread {
             val adapter =
                 ArrayAdapter(this, android.R.layout.simple_list_item_1, listOf<String>())
-            listViewUrlList.adapter = adapter
+            runOnUiThread {
+                listViewUrlList.adapter = adapter
+            }
+        }.start()
+    }
+
+    private fun lockPortEditTexts() {
+        editTextHttpPortInput.isEnabled = false
+        editTextHttpsPortInput.isEnabled = false
+
+        val actualHttpPort = connection.service?.httpServer?.listeningPort
+        if (actualHttpPort != null) {
+            editTextHttpPortInput.setText(actualHttpPort.toString())
+        }
+
+        val actualHttpsPort = connection.service?.httpsServer?.listeningPort
+        if (actualHttpsPort != null) {
+            editTextHttpsPortInput.setText(actualHttpsPort.toString())
+        }
+    }
+
+    private fun unlockPortEditTexts() {
+        editTextHttpPortInput.isEnabled = true
+        editTextHttpsPortInput.isEnabled = true
+    }
+
+    private fun onClickButtonStop() {
+        if (toastExceptionMessage { checkAndGetService().stopServer() }) {
+            unlockPortEditTexts()
+            clearIpList()
             Toast.makeText(this, "已关闭", Toast.LENGTH_SHORT).show()
         }
     }

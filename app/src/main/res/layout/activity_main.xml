@@ -29,12 +29,26 @@
             android:layout_weight="1" />
 
         <EditText
-            android:id="@+id/editTextPortInput"
-            android:layout_width="wrap_content"
+            android:id="@+id/editTextHttpPortInput"
+            android:layout_width="100dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="72dp"
             android:ems="10"
-            android:hint="端口号"
+            android:hint="HTTP"
+            android:inputType="number" />
+
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <EditText
+            android:id="@+id/editTextHttpsPortInput"
+            android:layout_width="100dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="72dp"
+            android:ems="10"
+            android:hint="HTTPS"
             android:inputType="number" />
 
         <Space

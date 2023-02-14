@@ -101,13 +101,15 @@ class MainActivity : AppCompatActivity() {
 //                }
 //            builder.show()
 //        }
-        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
-            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!= PackageManager.PERMISSION_GRANTED) {
+        val permissions = listOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.WAKE_LOCK
+        )
 
+        if (permissions.any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
             permissionRequestCode = 1024
-            requestPermissions(listOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ).toTypedArray(), permissionRequestCode)
+            requestPermissions(permissions.toTypedArray(), permissionRequestCode)
         }
     }
 
@@ -124,6 +126,7 @@ class MainActivity : AppCompatActivity() {
             val permissionName = when (permission) {
                 Manifest.permission.READ_EXTERNAL_STORAGE -> "读"
                 Manifest.permission.WRITE_EXTERNAL_STORAGE -> "写"
+                Manifest.permission.WAKE_LOCK -> "唤醒锁"
                 else -> permission
             }
             val grantResultString = when (grantResult) {

@@ -4,8 +4,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.os.PowerManager
 import top.riverelder.android.riverlocalstorageserver.server.AndroidSimpleStorageServer
-import java.lang.Exception
+import kotlin.Exception
 
 const val DEFAULT_HTTP_PORT = 8888
 const val DEFAULT_HTTPS_PORT = 8889
@@ -20,30 +21,49 @@ class SimpleStorageServerService : Service() {
     }
 
     private fun checkAndGetServers(): List<AndroidSimpleStorageServer> {
-        val result = listOf(httpServer, httpsServer);
+        val result = listOf(httpServer, httpsServer)
         if (result.contains(null)) throw Exception("No server initialized!")
         return result.filterNotNull()
     }
 
-    public fun initializeServers(httpPort: Int = DEFAULT_HTTPS_PORT, httpsPort: Int = DEFAULT_HTTPS_PORT, context: Context) {
+    fun initializeServers(httpPort: Int = DEFAULT_HTTPS_PORT, httpsPort: Int = DEFAULT_HTTPS_PORT, context: Context) {
         initializeHttpServer(httpPort)
         initializeHttpsServer(httpsPort, context)
     }
 
 
-    public fun initializeHttpServer(port: Int = DEFAULT_HTTP_PORT) {
+    fun initializeHttpServer(port: Int = DEFAULT_HTTP_PORT) {
         val server = AndroidSimpleStorageServer(port)
         server.initialize(null)
         this.httpServer = server
     }
 
-    public fun initializeHttpsServer(port: Int = DEFAULT_HTTPS_PORT, context: Context) {
+    fun initializeHttpsServer(port: Int = DEFAULT_HTTPS_PORT, context: Context) {
         val server = AndroidSimpleStorageServer(port)
         server.initialize(context)
         this.httpsServer = server
     }
 
-    public fun startServer() = checkAndGetServers().forEach { it.start() }
+    fun startServer() {
+        checkAndGetServers().forEach { it.start() }
+        try {
+            lock = (getSystemService(Context.POWER_SERVICE) as PowerManager).run {
+                newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::MyWakelockTag").apply {
+                    acquire(10 * 60 * 1000L /*10 minutes*/)
+                }
+            }
+        } catch (ignored: Exception) { }
+    }
 
-    public fun stopServer() = checkAndGetServers().forEach { it.stop() }
+    fun stopServer() {
+        checkAndGetServers().forEach { it.stop() }
+        try {
+            val lock = this.lock
+            if (lock != null && lock.isHeld) {
+                lock.release()
+            }
+        } catch (ignored: Exception) { }
+    }
+
+    var lock: PowerManager.WakeLock? = null
 }

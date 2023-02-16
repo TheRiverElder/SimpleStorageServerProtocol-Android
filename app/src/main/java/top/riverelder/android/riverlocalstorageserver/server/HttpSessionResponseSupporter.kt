@@ -6,8 +6,9 @@ import fi.iki.elonen.NanoHTTPD.Response.Status
 import fi.iki.elonen.NanoHTTPD.newFixedLengthResponse
 import io.theriverelder.sssp.common.ResponseSupporter
 import java.io.InputStream
-import java.lang.Exception
+import java.lang.Long.parseLong
 import java.net.URI
+import kotlin.Exception
 
 class HttpSessionResponseSupporter(
     private val session: NanoHTTPD.IHTTPSession,
@@ -25,6 +26,14 @@ class HttpSessionResponseSupporter(
     }
 
     override fun getRequestBody(): InputStream = session.inputStream
+
+    override fun getRequestBodyLength(): Long {
+        return try {
+            parseLong(getContentLength(session.headers) ?: return -1)
+        } catch (ignored: Exception) {
+            -1
+        }
+    }
 
     override fun setResponseHeader(name: String, value: String) {
         headers[name] = value
@@ -54,4 +63,11 @@ class HttpSessionResponseSupporter(
         headers.forEach { response.addHeader(it.key, it.value) }
         return response
     }
+}
+
+fun getContentLength(headers: Map<String, String?>): String? {
+    return headers["Content-Length"]
+        ?: headers["content-Length"]
+        ?: headers["Content-length"]
+        ?: headers["content-length"]
 }
